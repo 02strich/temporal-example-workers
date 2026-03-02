@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: container-worker-deployment
+  labels:
+    app: container-worker
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: container-worker
+  template:
+    metadata:
+      labels:
+        app: container-worker
+    spec:
+      containers:
+      - name: worker
+        image: container-worker:latest

@@ -35,4 +35,6 @@ go.work.sum
 # Executables produced by repo
 /subprocess-worker
 /workflow-starter
+/bootstrap
+/lambda-worker.zip
 

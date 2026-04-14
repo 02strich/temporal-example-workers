@@ -3,24 +3,18 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
-	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/contrib/aws/lambdaworker"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.uber.org/zap"
 )
 
 const (
@@ -32,117 +26,73 @@ const (
 )
 
 func main() {
-	lambda.Start(handleRequest)
-}
-
-func handleRequest(ctx context.Context, event json.RawMessage) error {
-	logger := MakeLogger()
-	defer func() { _ = logger.Sync() }()
-
-	hostPort := getEnvDefault("HOST_PORT", defaultHostPort)
-	namespace := getEnvDefault("NAMESPACE", defaultNamespace)
-	taskQueueName := getEnvDefault("TQ_NAME", defaultTaskQueueName)
 	deploymentName := getEnvDefault("DEPLOYMENT_NAME", defaultDeploymentName)
 	buildID := getEnvDefault("BUILD_ID", defaultBuildID)
-	enableTLS := os.Getenv("ENABLE_TLS")
-	tlsKey := os.Getenv("TLS_KEY")
-	tlsCert := os.Getenv("TLS_CERT")
-	apiKey := os.Getenv("API_KEY")
 
-	var tlsConfig *tls.Config
-	var credentials client.Credentials
-
-	if enableTLS != "" {
-		tlsConfig = &tls.Config{InsecureSkipVerify: true}
-
-		config, err := config.LoadDefaultConfig(ctx)
-		if err != nil {
-			return err
-		}
-		svc := secretsmanager.NewFromConfig(config)
-
-		if tlsKey != "" && tlsCert != "" {
-			clientCert, err := svc.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: &tlsCert})
-			if err != nil {
-				return err
-			}
-			clientKey, err := svc.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: &tlsKey})
-			if err != nil {
-				return err
-			}
-
-			cert, err := tls.X509KeyPair([]byte(*clientCert.SecretString), []byte(*clientKey.SecretString))
-			if err != nil {
-				return err
-			}
-			tlsConfig.Certificates = append(tlsConfig.Certificates, cert)
-			logger.Info("Configured client cert", zap.String("cert", fmt.Sprintf("%#v", cert)))
-		}
-
-		if apiKey != "" {
-			apiKeyValue, err := svc.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: &apiKey})
-			if err != nil {
-				return err
-			}
-			credentials = client.NewAPIKeyStaticCredentials(*apiKeyValue.SecretString)
-		}
-	}
-
-	c, err := client.Dial(client.Options{
-		HostPort:  hostPort,
-		Namespace: namespace,
-		Logger:    newZapSDKLogger(logger),
-		ConnectionOptions: client.ConnectionOptions{
-			TLS: tlsConfig,
+	lambdaworker.RunWorker(
+		worker.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildID:        buildID,
 		},
-		Credentials: credentials,
-	})
-	if err != nil {
-		return err
-	}
-	defer c.Close()
+		func(ctx *lambdaworker.Options) error {
+			taskQueueName := getEnvDefault("TQ_NAME", defaultTaskQueueName)
+			ctx.TaskQueue = taskQueueName
 
-	wOpts := worker.Options{
-		DisableEagerActivities: true,
-		DeploymentOptions: worker.DeploymentOptions{
-			UseVersioning: true,
-			Version: worker.WorkerDeploymentVersion{
-				DeploymentName: deploymentName,
-				BuildID:        buildID,
-			},
-			DefaultVersioningBehavior: workflow.VersioningBehaviorPinned,
-		},
+			enableTLS := os.Getenv("ENABLE_TLS")
+			tlsKey := os.Getenv("TLS_KEY")
+			tlsCert := os.Getenv("TLS_CERT")
+			apiKey := os.Getenv("API_KEY")
 
-		MaxConcurrentActivityExecutionSize:     2,
-		MaxConcurrentWorkflowTaskExecutionSize: 2,
-		MaxConcurrentNexusTaskExecutionSize:    2,
-	}
+			localCtx := context.Background()
 
-	w := worker.New(c, taskQueueName, wOpts)
-	w.RegisterDynamicWorkflow(noopWorkflow, workflow.DynamicRegisterOptions{})
-	w.RegisterDynamicActivity(noopActivity, activity.DynamicRegisterOptions{})
+			var tlsConfig *tls.Config
+			var credentials client.Credentials
 
-	// end the worker on SIGTERM or after 1 minute
-	osSignalChannel := make(chan os.Signal, 1)
-	signal.Notify(osSignalChannel, os.Interrupt, syscall.SIGTERM)
-	ret := make(chan any, 1)
-	go func() {
-		s := <-osSignalChannel
-		ret <- s
-		close(ret)
-	}()
-	time.AfterFunc(1*time.Minute, func() { ret <- "timed out" })
+			if enableTLS != "" {
+				tlsConfig = &tls.Config{InsecureSkipVerify: true}
 
-	logger.Info("subprocess worker starting",
-		zap.String("hostPort", hostPort),
-		zap.String("namespace", namespace),
-		zap.String("taskQueue", taskQueueName),
-	)
-	if err := w.Run(ret); err != nil && !errors.Is(err, context.Canceled) {
-		return err
-	}
+				config, err := config.LoadDefaultConfig(localCtx)
+				if err != nil {
+					return err
+				}
+				svc := secretsmanager.NewFromConfig(config)
 
-	return nil
+				if tlsKey != "" && tlsCert != "" {
+					clientCert, err := svc.GetSecretValue(localCtx, &secretsmanager.GetSecretValueInput{SecretId: &tlsCert})
+					if err != nil {
+						return err
+					}
+					clientKey, err := svc.GetSecretValue(localCtx, &secretsmanager.GetSecretValueInput{SecretId: &tlsKey})
+					if err != nil {
+						return err
+					}
+
+					cert, err := tls.X509KeyPair([]byte(*clientCert.SecretString), []byte(*clientKey.SecretString))
+					if err != nil {
+						return err
+					}
+					tlsConfig.Certificates = append(tlsConfig.Certificates, cert)
+				}
+
+				if apiKey != "" {
+					apiKeyValue, err := svc.GetSecretValue(localCtx, &secretsmanager.GetSecretValueInput{SecretId: &apiKey})
+					if err != nil {
+						return err
+					}
+					credentials = client.NewAPIKeyStaticCredentials(*apiKeyValue.SecretString)
+				}
+			}
+			ctx.ClientOptions.ConnectionOptions = client.ConnectionOptions{
+				TLS: tlsConfig,
+			}
+			ctx.ClientOptions.Credentials = credentials
+			ctx.WorkerOptions.DeploymentOptions.DefaultVersioningBehavior = workflow.VersioningBehaviorPinned
+
+			ctx.RegisterDynamicWorkflow(noopWorkflow, workflow.DynamicRegisterOptions{})
+			ctx.RegisterDynamicActivity(noopActivity, activity.DynamicRegisterOptions{})
+
+			return nil
+		})
 }
 
 func noopWorkflow(ctx workflow.Context, args converter.EncodedValues) (string, error) {

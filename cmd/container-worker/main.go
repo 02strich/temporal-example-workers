@@ -72,7 +72,7 @@ func main() {
 	w.RegisterDynamicWorkflow(noopWorkflow, workflow.DynamicRegisterOptions{})
 	w.RegisterDynamicActivity(noopActivity, activity.DynamicRegisterOptions{})
 
-	logger.Info("subprocess worker starting",
+	logger.Info("container worker starting",
 		zap.String("hostPort", hostPort),
 		zap.String("namespace", namespace),
 		zap.String("taskQueue", taskQueueName),

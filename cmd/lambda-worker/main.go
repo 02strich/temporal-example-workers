@@ -18,8 +18,6 @@ import (
 )
 
 const (
-	defaultHostPort       = "127.0.0.1:7233"
-	defaultNamespace      = "default"
 	defaultTaskQueueName  = "worker-versioning-sample"
 	defaultDeploymentName = "test"
 	defaultBuildID        = "v1"
@@ -82,9 +80,7 @@ func main() {
 					credentials = client.NewAPIKeyStaticCredentials(*apiKeyValue.SecretString)
 				}
 			}
-			ctx.ClientOptions.ConnectionOptions = client.ConnectionOptions{
-				TLS: tlsConfig,
-			}
+			ctx.ClientOptions.ConnectionOptions.TLS = tlsConfig
 			ctx.ClientOptions.Credentials = credentials
 			ctx.WorkerOptions.DeploymentOptions.DefaultVersioningBehavior = workflow.VersioningBehaviorPinned
 

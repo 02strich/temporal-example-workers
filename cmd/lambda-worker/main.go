@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/contrib/aws/lambdaworker"
+	"go.temporal.io/sdk/contrib/sysinfo"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -83,6 +84,7 @@ func main() {
 			ctx.ClientOptions.ConnectionOptions.TLS = tlsConfig
 			ctx.ClientOptions.Credentials = credentials
 			ctx.WorkerOptions.DeploymentOptions.DefaultVersioningBehavior = workflow.VersioningBehaviorPinned
+			ctx.WorkerOptions.SysInfoProvider = sysinfo.SysInfoProvider()
 
 			ctx.RegisterDynamicWorkflow(noopWorkflow, workflow.DynamicRegisterOptions{})
 			ctx.RegisterDynamicActivity(noopActivity, activity.DynamicRegisterOptions{})

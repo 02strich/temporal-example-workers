@@ -24,6 +24,8 @@ clean-bins:
 	@printf $(COLOR) "Delete old binaries..."
 	@rm -f subprocess-worker
 	@rm -f workflow-starter
+	@rm -f bootstrap
+	@rm -f lambda-worker.zip
 
 subprocess-worker: $(ALL_SRC)
 	@printf $(COLOR) "Build subprocess-worker with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."

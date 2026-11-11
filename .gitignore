@@ -38,3 +38,9 @@ go.work.sum
 /bootstrap
 /lambda-worker.zip
 
+# Python examples
+__pycache__/
+.venv/
+.pytest_cache/
+/cmd/foundry-worker/.azure/
+

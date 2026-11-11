@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: temporal-foundry-worker
+requiredVersions:
+  azd: '>=1.27.1'
+  extensions:
+    azure.ai.agents: '>=1.0.0-beta.9'
+services:
+  temporal-worker:
+    host: azure.ai.agent
+    project: .
+    language: python
+    codeConfiguration:
+      runtime: python_3_13
+      entryPoint: main.py
+    kind: hosted
+    name: temporal-worker
+    displayName: Temporal Background Worker
+    description: Wake a Temporal worker for at most five minutes.
+    protocols:
+      - protocol: invocations
+        version: 2.0.0
+    env:
+      PYTHONNOUSERSITE: "1"
+      HOST_PORT: ${HOST_PORT}
+      NAMESPACE: ${NAMESPACE}
+      TQ_NAME: ${TQ_NAME}
+      DEPLOYMENT_NAME: ${DEPLOYMENT_NAME}
+      BUILD_ID: ${BUILD_ID}
+      ENABLE_TLS: ${ENABLE_TLS}
+      API_KEY: ${API_KEY}
+    container:
+      resources:
+        cpu: '0.5'
+        memory: 1Gi
+infra:
+  provider: microsoft.foundry
